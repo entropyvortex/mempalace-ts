@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.turbo/
+coverage/
+*.sqlite3
+.env
+.env.*
+.DS_Store
+.pnpm-store/
+.devcontainer/
+
+
+# Original mempalace files
+mempalace/

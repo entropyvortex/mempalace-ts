@@ -1,0 +1,24 @@
+{
+  "name": "@mempalace-ts/cli",
+  "version": "1.0.0",
+  "description": "CLI for mempalace-ts",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "bin": {
+    "mempalace-ts": "./bin/mempalace-ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "@mempalace-ts/core": "workspace:*",
+    "commander": "13.1.0",
+    "yaml": "2.8.3"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "license": "MIT"
+}

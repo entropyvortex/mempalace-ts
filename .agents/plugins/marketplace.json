@@ -1,0 +1,20 @@
+{
+  "name": "mempalace-ts",
+  "interface": {
+    "displayName": "MemPalace"
+  },
+  "plugins": [
+    {
+      "name": "mempalace-ts",
+      "source": {
+        "source": "local",
+        "path": "./.codex-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "NONE"
+      },
+      "category": "Coding"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@mempalace-ts/mcp",
+  "version": "1.0.0",
+  "description": "MCP server for mempalace-ts — 19 tools, exact parity",
+  "type": "module",
+  "main": "./dist/server.js",
+  "bin": {
+    "mempalace-ts-mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "@mempalace-ts/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "date-fns": "4.1.0",
+    "uuid": "11.1.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "license": "MIT"
+}

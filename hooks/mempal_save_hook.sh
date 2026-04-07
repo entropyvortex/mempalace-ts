@@ -1,0 +1,143 @@
+#!/bin/bash
+# MEMPALACE SAVE HOOK — Auto-save every N exchanges
+#
+# Claude Code "Stop" hook. After every assistant response:
+# 1. Counts human messages in the session transcript
+# 2. Every SAVE_INTERVAL messages, BLOCKS the AI from stopping
+# 3. Returns a reason telling the AI to save structured diary + palace entries
+# 4. AI does the save (topics, decisions, code, quotes → organized into palace)
+# 5. Next Stop fires with stop_hook_active=true → lets AI stop normally
+#
+# The AI does the classification — it knows what wing/hall/closet to use
+# because it has context about the conversation. No regex needed.
+#
+# === INSTALL ===
+# Add to .claude/settings.local.json:
+#
+#   "hooks": {
+#     "Stop": [{
+#       "matcher": "*",
+#       "hooks": [{
+#         "type": "command",
+#         "command": "/absolute/path/to/mempal_save_hook.sh",
+#         "timeout": 30
+#       }]
+#     }]
+#   }
+#
+# For Codex CLI, add to .codex/hooks.json:
+#
+#   "Stop": [{
+#     "type": "command",
+#     "command": "/absolute/path/to/mempal_save_hook.sh",
+#     "timeout": 30
+#   }]
+#
+# === HOW IT WORKS ===
+#
+# Claude Code sends JSON on stdin with these fields:
+#   session_id       — unique session identifier
+#   stop_hook_active — true if AI is already in a save cycle (prevents infinite loop)
+#   transcript_path  — path to the JSONL transcript file
+#
+# When we block, Claude Code shows our "reason" to the AI as a system message.
+# The AI then saves to memory, and when it tries to stop again,
+# stop_hook_active=true so we let it through. No infinite loop.
+#
+# === MEMPALACE CLI ===
+# This repo uses: mempalace-ts mine <dir>
+# or:             mempalace-ts mine <dir> --mode convos
+# Set MEMPAL_DIR below if you want the hook to auto-ingest after blocking.
+# Leave blank to rely on the AI's own save instructions.
+#
+# === CONFIGURATION ===
+
+SAVE_INTERVAL=15  # Save every N human messages (adjust to taste)
+STATE_DIR="$HOME/.mempalace/hook_state"
+mkdir -p "$STATE_DIR"
+
+# Optional: set to the directory you want auto-ingested on each save trigger.
+# Example: MEMPAL_DIR="$HOME/conversations"
+# Leave empty to skip auto-ingest (AI handles saving via the block reason).
+MEMPAL_DIR=""
+
+# Read JSON input from stdin
+INPUT=$(cat)
+
+# Parse fields from Claude Code's JSON using Node.js
+SESSION_ID=$(echo "$INPUT" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).session_id||'unknown')}catch{console.log('unknown')}})" 2>/dev/null)
+# Sanitize SESSION_ID to prevent path traversal (only allow alnum, dash, underscore)
+SESSION_ID=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9_-')
+[ -z "$SESSION_ID" ] && SESSION_ID="unknown"
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).stop_hook_active||false)}catch{console.log('false')}})" 2>/dev/null)
+TRANSCRIPT_PATH=$(echo "$INPUT" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).transcript_path||'')}catch{console.log('')}})" 2>/dev/null)
+
+# Expand ~ in path
+TRANSCRIPT_PATH="${TRANSCRIPT_PATH/#\~/$HOME}"
+
+# If we're already in a save cycle, let the AI stop normally
+# This is the infinite-loop prevention: block once → AI saves → tries to stop again → we let it through
+if [ "$STOP_HOOK_ACTIVE" = "True" ] || [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+    echo "{}"
+    exit 0
+fi
+
+# Count human messages in the JSONL transcript
+if [ -f "$TRANSCRIPT_PATH" ]; then
+    EXCHANGE_COUNT=$(node -e "
+const fs = require('fs');
+let count = 0;
+for (const line of fs.readFileSync(process.argv[1], 'utf8').split('\n')) {
+  if (!line.trim()) continue;
+  try {
+    const entry = JSON.parse(line);
+    const msg = entry.message;
+    if (msg && typeof msg === 'object' && msg.role === 'user') {
+      const content = msg.content || '';
+      if (typeof content === 'string' && content.includes('<command-message>')) continue;
+      count++;
+    }
+  } catch {}
+}
+console.log(count);
+" "$TRANSCRIPT_PATH" 2>/dev/null)
+else
+    EXCHANGE_COUNT=0
+fi
+
+# Track last save point for this session
+LAST_SAVE_FILE="$STATE_DIR/${SESSION_ID}_last_save"
+LAST_SAVE=0
+if [ -f "$LAST_SAVE_FILE" ]; then
+    LAST_SAVE=$(cat "$LAST_SAVE_FILE")
+fi
+
+SINCE_LAST=$((EXCHANGE_COUNT - LAST_SAVE))
+
+# Log for debugging (check ~/.mempalace/hook_state/hook.log)
+echo "[$(date '+%H:%M:%S')] Session $SESSION_ID: $EXCHANGE_COUNT exchanges, $SINCE_LAST since last save" >> "$STATE_DIR/hook.log"
+
+# Time to save?
+if [ "$SINCE_LAST" -ge "$SAVE_INTERVAL" ] && [ "$EXCHANGE_COUNT" -gt 0 ]; then
+    # Update last save point
+    echo "$EXCHANGE_COUNT" > "$LAST_SAVE_FILE"
+
+    echo "[$(date '+%H:%M:%S')] TRIGGERING SAVE at exchange $EXCHANGE_COUNT" >> "$STATE_DIR/hook.log"
+
+    # Optional: run mempalace ingest in background if MEMPAL_DIR is set
+    if [ -n "$MEMPAL_DIR" ] && [ -d "$MEMPAL_DIR" ]; then
+        npx mempalace-ts mine "$MEMPAL_DIR" >> "$STATE_DIR/hook.log" 2>&1 &
+    fi
+
+    # Block the AI and tell it to save
+    # The "reason" becomes a system message the AI sees and acts on
+    cat << 'HOOKJSON'
+{
+  "decision": "block",
+  "reason": "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code from this session to your memory system. Organize into appropriate categories. Use verbatim quotes where possible. Continue conversation after saving."
+}
+HOOKJSON
+else
+    # Not time yet — let the AI stop normally
+    echo "{}"
+fi
