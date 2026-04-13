@@ -6,7 +6,7 @@ TypeScript-native port of the MemPalace AI memory system.
 
 ## What is this
 
-MemPalace-TS is a complete TypeScript port of the [Python MemPalace](https://github.com/yourpalal/mempalace) project, rewritten from scratch with idiomatic TypeScript patterns. It provides persistent, layered memory for AI coding agents -- identity, context retrieval, semantic search, and knowledge graphs -- backed by ChromaDB and SQLite. This is a library-first design for integration with TypeScript-based AI tooling and Node.js hook systems.
+MemPalace-TS is a complete TypeScript port of the [Python MemPalace](https://github.com/milla-jovovich/mempalace) project, rewritten from scratch with idiomatic TypeScript patterns. It provides persistent, layered memory for AI coding agents -- identity, context retrieval, semantic search, and knowledge graphs -- backed by ChromaDB and SQLite. This is a library-first design for integration with TypeScript-based AI tooling and Node.js hook systems.
 
 ## Motivation
 
