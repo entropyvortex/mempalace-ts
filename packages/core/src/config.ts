@@ -17,6 +17,73 @@ import {
   DEFAULT_TOPIC_WINGS,
 } from './types.js';
 
+// ---------------------------------------------------------------------------
+// Input validation — 1:1 PORT from config.py sanitize_name / sanitize_content
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum length for wing/room/entity names.
+ * Python: config.py MAX_NAME_LENGTH
+ */
+export const MAX_NAME_LENGTH = 128;
+
+/**
+ * Safe-name regex. Accepts Unicode letters/digits, spaces, dots, apostrophes,
+ * and hyphens. Must NOT start or end with underscore. Single characters are
+ * valid.
+ *
+ * Python: config.py _SAFE_NAME_RE  (uses \w which is Unicode-aware in Python 3;
+ * in TS we use \p{L}\p{N} with the `u` flag for equivalent behaviour.)
+ */
+const _SAFE_NAME_RE = /^(?:[\p{L}\p{N}](?:[\p{L}\p{N} .'\-]{0,126}[\p{L}\p{N}])?)$/u;
+
+/**
+ * Validate and sanitize a wing/room/entity name.
+ *
+ * Python: config.py sanitize_name(value, field_name)
+ *
+ * @throws {Error} If the name is invalid.
+ */
+export function sanitizeName(value: string, fieldName = 'name'): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${fieldName} must be a non-empty string`);
+  }
+  value = value.trim();
+  if (value.length > MAX_NAME_LENGTH) {
+    throw new Error(`${fieldName} exceeds maximum length of ${MAX_NAME_LENGTH} characters`);
+  }
+  if (value.includes('..') || value.includes('/') || value.includes('\\')) {
+    throw new Error(`${fieldName} contains invalid path characters`);
+  }
+  if (value.includes('\x00')) {
+    throw new Error(`${fieldName} contains null bytes`);
+  }
+  if (!_SAFE_NAME_RE.test(value)) {
+    throw new Error(`${fieldName} contains invalid characters`);
+  }
+  return value;
+}
+
+/**
+ * Validate drawer/diary content length.
+ *
+ * Python: config.py sanitize_content(value, max_length)
+ *
+ * @throws {Error} If the content is invalid.
+ */
+export function sanitizeContent(value: string, maxLength = 100_000): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('content must be a non-empty string');
+  }
+  if (value.length > maxLength) {
+    throw new Error(`content exceeds maximum length of ${maxLength} characters`);
+  }
+  if (value.includes('\x00')) {
+    throw new Error('content contains null bytes');
+  }
+  return value;
+}
+
 const FileConfigSchema = z.object({
   palace_path: z.string().optional(),
   collection_name: z.string().optional(),
@@ -109,6 +176,45 @@ export class MempalaceConfig {
   /** Mapping of hall names to keyword lists. */
   get hallKeywords(): Record<string, string[]> {
     return this._fileConfig.hall_keywords ?? CONFIG_HALL_KEYWORDS;
+  }
+
+  /**
+   * Whether the stop hook saves directly (true) or blocks for MCP calls (false).
+   * Python: config.py MempalaceConfig.hook_silent_save
+   */
+  get hookSilentSave(): boolean {
+    const hooks = (this._fileConfig as Record<string, unknown>).hooks as
+      | Record<string, unknown>
+      | undefined;
+    return (hooks?.silent_save as boolean) ?? true;
+  }
+
+  /**
+   * Whether the stop hook shows a desktop notification via notify-send.
+   * Python: config.py MempalaceConfig.hook_desktop_toast
+   */
+  get hookDesktopToast(): boolean {
+    const hooks = (this._fileConfig as Record<string, unknown>).hooks as
+      | Record<string, unknown>
+      | undefined;
+    return (hooks?.desktop_toast as boolean) ?? false;
+  }
+
+  /**
+   * Update a hook setting and write config to disk.
+   * Python: config.py MempalaceConfig.set_hook_setting(key, value)
+   */
+  setHookSetting(key: string, value: boolean): void {
+    const fc = this._fileConfig as Record<string, unknown>;
+    if (!fc.hooks || typeof fc.hooks !== 'object') {
+      fc.hooks = {};
+    }
+    (fc.hooks as Record<string, unknown>)[key] = value;
+    try {
+      writeFileSync(this._configFile, JSON.stringify(this._fileConfig, null, 2));
+    } catch {
+      // Ignore write errors (e.g. read-only filesystem)
+    }
   }
 
   /** Create config directory and write default config.json if it doesn't exist. */

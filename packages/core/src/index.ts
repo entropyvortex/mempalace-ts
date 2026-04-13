@@ -124,7 +124,7 @@ export type { ChromaCollection } from './chroma.js';
 export { openDatabase } from './storage.js';
 
 // Configuration (NEW — ported from config.py)
-export { MempalaceConfig, CONFIG_HALL_KEYWORDS } from './config.js';
+export { MempalaceConfig, CONFIG_HALL_KEYWORDS, sanitizeName, sanitizeContent, MAX_NAME_LENGTH } from './config.js';
 
 // Room Detection (NEW — ported from room_detector_local.py)
 export {
@@ -174,6 +174,47 @@ export { GitignoreMatcher, loadGitignoreMatcher, isGitignored } from './utils/gi
 
 // Entity Registry (NEW — ported from entity_registry.py)
 export { EntityRegistry, COMMON_ENGLISH_WORDS } from './entity-registry.js';
+
+// Query Sanitizer (NEW — ported from query_sanitizer.py)
+export { sanitizeQuery } from './query-sanitizer.js';
+export type { SanitizeResult } from './query-sanitizer.js';
+
+// Deduplication (NEW — ported from dedup.py)
+export {
+  getSourceGroups,
+  dedupSourceGroup,
+  showStats,
+  dedupPalace,
+  DEFAULT_THRESHOLD,
+  MIN_DRAWERS_TO_CHECK,
+} from './dedup.js';
+
+// Exporter (NEW — ported from exporter.py)
+export { exportPalace } from './exporter.js';
+
+// Repair (NEW — ported from repair.py)
+export { scanPalace, pruneCorrupt, rebuildIndex } from './repair.js';
+export type { ScanResult } from './repair.js';
+
+// Migrate (NEW — ported from migrate.py)
+export {
+  extractDrawersFromSqlite,
+  detectChromadbVersion,
+  containsPalaceDatabase,
+  migrate,
+} from './migrate.js';
+export type { SqliteDrawer, MigrateResult } from './migrate.js';
+
+// Onboarding (NEW — ported from onboarding.py)
+export { DEFAULT_WINGS, quickSetup, runOnboarding } from './onboarding.js';
+export type { PersonEntry, PalaceMode } from './onboarding.js';
+
+// i18n (NEW — ported from i18n/__init__.py)
+export { availableLanguages, loadLang, t, currentLang, getRegex } from './i18n.js';
+
+// Backends (NEW — ported from backends/)
+export type { BaseCollection } from './backends/base.js';
+export { ChromaCollection as BackendChromaCollection, ChromaBackend } from './backends/chroma.js';
 
 // Utilities
 export { normalize } from './utils/normalize.js';

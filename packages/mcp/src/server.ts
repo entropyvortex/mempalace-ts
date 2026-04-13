@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @module mcp-server
- * MCP (Model Context Protocol) server for mempalace-ts — 19 tools, exact parity.
+ * MCP (Model Context Protocol) server for mempalace-ts — 25 tools, exact parity.
  *
  * 1:1 PORT from original mcp_server.py
  *
@@ -11,6 +11,8 @@
  *   KNOWLEDGE GRAPH (5): kg_query, kg_add, kg_invalidate, kg_timeline, kg_stats
  *   NAVIGATION (3): traverse, find_tunnels, graph_stats
  *   AGENT DIARY (2): diary_write, diary_read
+ *   DRAWER MANAGEMENT (3): get_drawer, list_drawers, update_drawer
+ *   SETTINGS & MAINTENANCE (3): hook_settings, reconnect, memories_filed_away
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -26,11 +28,13 @@ import {
   listRooms,
   getTaxonomy,
   checkDuplicate,
+  getDrawers,
   KnowledgeGraph,
   traverse,
   findTunnels,
   graphStats,
   Dialect,
+  MempalaceConfig,
   type DrawerMetadata,
   type QueryDirection,
 } from '@mempalace-ts/core';
@@ -514,6 +518,169 @@ server.tool(
     const recent = diary.slice(-limit);
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(recent, null, 2) }],
+    };
+  },
+);
+
+// ===== DRAWER MANAGEMENT TOOLS (3) =========================================
+
+/**
+ * Tool 20: mempalace_get_drawer — Fetch a single drawer by ID
+ * Python: mcp_server.py tool_get_drawer
+ */
+server.tool(
+  'mempalace_get_drawer',
+  'Fetch a single drawer by ID',
+  { id: z.string().describe('Drawer ID to fetch') },
+  async ({ id }) => {
+    const collection = await getCollection();
+    const results = await collection.get({ ids: [id], include: ['documents' as any, 'metadatas' as any] });
+    if (!results.ids.length) {
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Drawer not found' }) }] };
+    }
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify({
+        id: results.ids[0],
+        content: results.documents?.[0] ?? '',
+        metadata: results.metadatas?.[0] ?? {},
+      }, null, 2) }],
+    };
+  },
+);
+
+/**
+ * Tool 21: mempalace_list_drawers — List drawers with pagination and filters
+ * Python: mcp_server.py tool_list_drawers
+ */
+server.tool(
+  'mempalace_list_drawers',
+  'List drawers with pagination and optional wing/room filters',
+  {
+    wing: z.string().optional().describe('Filter by wing'),
+    room: z.string().optional().describe('Filter by room'),
+    limit: z.number().optional().default(20).describe('Maximum drawers to return'),
+    offset: z.number().optional().default(0).describe('Offset for pagination'),
+  },
+  async ({ wing, room, limit, offset }) => {
+    const collection = await getCollection();
+    const drawers = await getDrawers(collection, wing, room, limit, offset);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(drawers, null, 2) }],
+    };
+  },
+);
+
+/**
+ * Tool 22: mempalace_update_drawer — Update drawer content and/or metadata
+ * Python: mcp_server.py tool_update_drawer
+ */
+server.tool(
+  'mempalace_update_drawer',
+  'Update drawer content and/or metadata',
+  {
+    id: z.string().describe('Drawer ID to update'),
+    content: z.string().optional().describe('New content for the drawer'),
+    wing: z.string().optional().describe('New wing for the drawer'),
+    room: z.string().optional().describe('New room for the drawer'),
+  },
+  async ({ id, content, wing, room }) => {
+    const collection = await getCollection();
+    const updatePayload: Record<string, unknown> = { ids: [id] };
+    if (content !== undefined) updatePayload.documents = [content];
+    const metadataUpdates: Record<string, string> = {};
+    if (wing !== undefined) metadataUpdates.wing = wing;
+    if (room !== undefined) metadataUpdates.room = room;
+    if (Object.keys(metadataUpdates).length > 0) updatePayload.metadatas = [metadataUpdates];
+    await collection.update(updatePayload as any);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, updated: id }, null, 2),
+      }],
+    };
+  },
+);
+
+// ===== SETTINGS & MAINTENANCE TOOLS (3) =====================================
+
+/**
+ * Tool 23: mempalace_hook_settings — Get or set hook behavior
+ * Python: mcp_server.py tool_hook_settings
+ */
+server.tool(
+  'mempalace_hook_settings',
+  'Get or set hook behavior (silent_save, desktop_toast)',
+  {
+    silent_save: z.boolean().optional().describe('Enable/disable silent save on hook'),
+    desktop_toast: z.boolean().optional().describe('Enable/disable desktop toast notifications'),
+  },
+  async ({ silent_save, desktop_toast }) => {
+    const config = new MempalaceConfig();
+    if (silent_save !== undefined) config.setHookSetting('silent_save', silent_save);
+    if (desktop_toast !== undefined) config.setHookSetting('desktop_toast', desktop_toast);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          silent_save: config.hookSilentSave,
+          desktop_toast: config.hookDesktopToast,
+        }, null, 2),
+      }],
+    };
+  },
+);
+
+/**
+ * Tool 24: mempalace_reconnect — Force cache invalidation
+ * Python: mcp_server.py tool_reconnect
+ */
+server.tool(
+  'mempalace_reconnect',
+  'Force cache invalidation — reset ChromaDB client and knowledge graph',
+  {},
+  async () => {
+    kg = null;
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Cache invalidated. Next call will reconnect.' }, null, 2),
+      }],
+    };
+  },
+);
+
+/**
+ * Tool 25: mempalace_memories_filed_away — Check recent diary activity
+ * Python: mcp_server.py tool_memories_filed_away
+ */
+server.tool(
+  'mempalace_memories_filed_away',
+  'Check if the most recent diary entry was within the last N minutes',
+  {
+    minutes: z.number().optional().default(30).describe('Time window in minutes (default 30)'),
+  },
+  async ({ minutes }) => {
+    if (diary.length === 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ filed_recently: false, message: 'No diary entries found' }, null, 2),
+        }],
+      };
+    }
+    const lastEntry = diary[diary.length - 1];
+    const lastTime = new Date(lastEntry.timestamp).getTime();
+    const cutoff = Date.now() - minutes * 60 * 1000;
+    const filedRecently = lastTime >= cutoff;
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          filed_recently: filedRecently,
+          last_entry_at: lastEntry.timestamp,
+          minutes_ago: Math.round((Date.now() - lastTime) / 60000),
+        }, null, 2),
+      }],
     };
   },
 );

@@ -76,10 +76,6 @@ function chunkByExchange(content: string): TextChunk[] {
     if (line.startsWith('>')) {
       // Python: Start of a new exchange — flush previous chunk if we have assistant content
       if (currentChunk.length > 0 && !inUserTurn) {
-        // Cap chunk size — Python limits AI response to ~8 lines
-        if (currentChunk.length > 12) {
-          currentChunk = currentChunk.slice(0, 12);
-        }
         const text = currentChunk.join('\n').trim();
         if (text.length >= 50) {
           chunks.push({ content: text, chunk_index: chunks.length });
@@ -99,10 +95,6 @@ function chunkByExchange(content: string): TextChunk[] {
 
   // Flush final chunk
   if (currentChunk.length > 0) {
-    // Cap chunk size — Python limits AI response to ~8 lines
-    if (currentChunk.length > 12) {
-      currentChunk = currentChunk.slice(0, 12);
-    }
     const text = currentChunk.join('\n').trim();
     if (text.length >= 50) {
       chunks.push({ content: text, chunk_index: chunks.length });
@@ -230,7 +222,25 @@ export async function mineConvos(options: {
 
         const raw = readFileSync(filepath, 'utf-8');
         const content = normalize(raw);
-        if (!content.trim()) return 0;
+
+        // Python v3.2.0: register sentinel for empty / 0-chunk files so
+        // fileAlreadyMined() returns true next time (prevents re-processing).
+        if (!content.trim()) {
+          if (!dryRun) {
+            const sentinelId = `sentinel_${randomUUID().slice(0, 8)}`;
+            const sentinelMeta: DrawerMetadata = {
+              wing: wing ?? 'wing_convos',
+              room: 'sentinel',
+              source_file: filepath,
+              chunk_index: 0,
+              added_by: agent,
+              filed_at: formatDateTime(new Date()),
+              ingest_mode: 'convos',
+            };
+            await addDrawer(collection, sentinelId, '0-chunk sentinel', sentinelMeta);
+          }
+          return 0;
+        }
 
         const room = detectConvoRoom(content);
         const wingName = wing ?? `wing_convos`;
@@ -249,6 +259,24 @@ export async function mineConvos(options: {
           }
         } else {
           chunks = chunkExchanges(content);
+        }
+
+        // Register sentinel for files that produce 0 chunks after extraction
+        if (chunks.length === 0) {
+          if (!dryRun) {
+            const sentinelId = `sentinel_${randomUUID().slice(0, 8)}`;
+            const sentinelMeta: DrawerMetadata = {
+              wing: wingName,
+              room: 'sentinel',
+              source_file: filepath,
+              chunk_index: 0,
+              added_by: agent,
+              filed_at: formatDateTime(new Date()),
+              ingest_mode: 'convos',
+            };
+            await addDrawer(collection, sentinelId, '0-chunk sentinel', sentinelMeta);
+          }
+          return 0;
         }
 
         if (dryRun) return chunks.length;
