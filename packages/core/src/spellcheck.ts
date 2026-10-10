@@ -100,6 +100,7 @@ export function editDistance(a: string, b: string): number {
 // ---------------------------------------------------------------------------
 
 const TOKEN_RE = /(\S+)/g;
+const TRAILING_PUNCT = new Set(['.', ',', '!', '?', ';', ':', "'", '"', ')', ']']);
 
 /**
  * Spell-correct a user message.
@@ -120,7 +121,9 @@ export function spellcheckUserText(
 
   return text.replace(TOKEN_RE, (token) => {
     // Strip trailing punctuation for checking, reattach after
-    const stripped = token.replace(/[.,!?;:'")\]]+$/, '');
+    let cut = token.length;
+    while (cut > 0 && TRAILING_PUNCT.has(token[cut - 1])) cut--;
+    const stripped = token.slice(0, cut);
     const punct = token.slice(stripped.length);
 
     if (!stripped || shouldSkip(stripped, knownNames)) return token;
