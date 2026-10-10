@@ -124,7 +124,8 @@ export class GitignoreMatcher {
   matches(path: string, isDir: boolean = false): boolean | null {
     let rel: string;
     try {
-      rel = relative(this.baseDir, path).split('\\').join('/').replace(/^\/+|\/+$/g, '');
+      rel = relative(this.baseDir, path).split('\\').join('/');
+      rel = trimSlashes(rel);
     } catch {
       return null;
     }
@@ -211,4 +212,12 @@ export function isGitignored(
     }
   }
   return ignored;
+}
+
+function trimSlashes(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s.charCodeAt(start) === 47) start++;
+  while (end > start && s.charCodeAt(end - 1) === 47) end--;
+  return s.slice(start, end);
 }

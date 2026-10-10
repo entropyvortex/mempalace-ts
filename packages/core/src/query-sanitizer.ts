@@ -42,7 +42,15 @@ const QUOTE_CHARS: ReadonlySet<string> = new Set(["'", '"']);
 const _SENTENCE_SPLIT = /[.!?。！？\n]+/;
 
 /** Question detector: ends with ? or ？ (possibly with trailing whitespace/quotes). */
-const _QUESTION_MARK = /[?？]\s*["']?\s*$/;
+function endsWithQuestion(s: string): boolean {
+  // Equivalent to /[?？]\s*["']?\s*$/ without backtracking.
+  let i = s.trimEnd().length - 1;
+  if (i >= 0 && (s[i] === '"' || s[i] === "'")) {
+    i--;
+    while (i >= 0 && /\s/.test(s[i])) i--;
+  }
+  return i >= 0 && (s[i] === '?' || s[i] === '\uff1f');
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -177,7 +185,7 @@ export function sanitizeQuery(rawQuery: string): SanitizeResult {
   const questionSentences: string[] = [];
 
   for (let i = allSegments.length - 1; i >= 0; i--) {
-    if (_QUESTION_MARK.test(allSegments[i])) {
+    if (endsWithQuestion(allSegments[i])) {
       questionSentences.push(allSegments[i]);
     }
   }

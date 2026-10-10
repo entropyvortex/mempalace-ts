@@ -43,6 +43,7 @@ describe('exportPalace', () => {
     }
     tmpDirs.length = 0;
     vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should return zero stats for empty palace', async () => {
