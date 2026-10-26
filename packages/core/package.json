@@ -27,13 +27,13 @@
     "chromadb": "1.9.2",
     "p-limit": "6.2.0",
     "yaml": "2.8.3",
-    "zod": "4.3.6"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",
     "typescript": "5.8.3",
     "vite": "7.3.7",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "license": "MIT"
 }
